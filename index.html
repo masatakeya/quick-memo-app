@@ -3,19 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
     <title>Quick Memo App</title>
 </head>
 <body>
+    <div class="container">
+        <h1>Quick Memo App</h1>
 
-    <h1>Quick Memo App</h1>
+        <div class="input-area">
+            <textarea id="memo-input" placeholder="ここにメモを入力..."></textarea>
+            <button id="save-button">保存</button>
+        </div>
 
-    <textarea id="memo-input" placeholder="ここにメモを入力..."></textarea>
-    
-    <button id="save-button">保存</button>
+        <h2>保存したメモ</h2>
 
-    <h2>保存したメモ</h2>
-    
-    <div id="memo-list"></div>
+        <div id="memo-list"></div>
+    </div>
 
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
