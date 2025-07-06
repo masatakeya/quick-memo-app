@@ -11,154 +11,126 @@
   };
 // =================================================
 
-// Firebaseを初期化する
+// Firebaseの初期化
 firebase.initializeApp(firebaseConfig);
-
-// FirestoreデータベースとAuthへの接続を準備する
-const db = firebase.firestore();
 const auth = firebase.auth();
+const db = firebase.firestore();
 
-// HTMLの要素を取得する
+// HTML要素の取得
+const loginButton = document.getElementById("login-button");
+const logoutButton = document.getElementById("logout-button");
+const authArea = document.getElementById("auth-area");
+const appArea = document.getElementById("app-area");
+const userInfo = document.getElementById("user-info");
+const userName = document.getElementById("user-name");
 const memoInput = document.getElementById("memo-input");
 const saveButton = document.getElementById("save-button");
 const memoList = document.getElementById("memo-list");
-const loginButton = document.getElementById("login-button");
-const logoutButton = document.getElementById("logout-button");
-const authContainer = document.getElementById("auth-container");
-const userInfo = document.getElementById("user-info");
-const userName = document.getElementById("user-name");
-const memoContainer = document.getElementById("memo-container");
 
-// ★追加：編集状態を管理するための変数
 let editMode = false;
 let editId = null;
-// ★追加：現在のユーザーを保持する変数
-let currentUser = null;
+let currentUid = null; // ★追加：現在のユーザーIDを保持する変数
+let unsubscribe = null; // ★追加：Firestoreのリスナーを停止するための変数
 
-// Googleログイン処理
+// ★追加：Googleログイン処理
 loginButton.addEventListener("click", () => {
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch((error) => {
-    console.error("ログインに失敗しました: ", error);
+  auth.signInWithPopup(provider).catch(error => {
+    console.error("ログインエラー", error);
   });
 });
 
-// ログアウト処理
+// ★追加：ログアウト処理
 logoutButton.addEventListener("click", () => {
-  auth.signOut().catch((error) => {
-    console.error("ログアウトに失敗しました: ", error);
-  });
+  auth.signOut();
 });
 
-// 認証状態の変化を監視する
-auth.onAuthStateChanged((user) => {
-  currentUser = user;
+// ★変更：認証状態の監視
+auth.onAuthStateChanged(user => {
   if (user) {
     // ログインしている場合
-    authContainer.style.display = "block";
-    loginButton.style.display = "none";
-    userInfo.style.display = "block";
-    userName.textContent = `ようこそ, ${user.displayName} さん`;
-    memoContainer.style.display = "block";
-    // ログインユーザーのメモを表示
-    loadMemos();
+    currentUid = user.uid;
+    userName.textContent = `${user.displayName} さん`;
+    appArea.style.display = 'block';
+    userInfo.style.display = 'flex';
+    loginButton.style.display = 'none';
+    
+    // ★自分のメモだけを購読開始
+    subscribeToMemos(currentUid);
+    
   } else {
     // ログアウトしている場合
-    authContainer.style.display = "block";
-    loginButton.style.display = "block";
-    userInfo.style.display = "none";
-    memoContainer.style.display = "none";
+    currentUid = null;
+    appArea.style.display = 'none';
+    userInfo.style.display = 'none';
+    loginButton.style.display = 'block';
+
+    // ★メモの購読を停止
+    if (unsubscribe) {
+      unsubscribe();
+    }
     memoList.innerHTML = ""; // メモリストをクリア
   }
 });
 
-// メモを保存または更新する機能
+// ★変更：メモを保存/更新
 saveButton.addEventListener("click", () => {
   const memoText = memoInput.value;
+  if (!memoText || !currentUid) return;
 
-  if (memoText && currentUser) {
-    if (editMode) {
-      // 更新処理
-      db.collection("memos").doc(editId).update({
-        text: memoText
-      }).then(() => {
-        console.log("メモを更新しました！");
-        editMode = false;
-        editId = null;
-        saveButton.textContent = "保存";
-        memoInput.value = "";
-      }).catch((error) => {
-        console.error("更新に失敗しました: ", error);
-      });
-    } else {
-      // 新規保存処理
-      db.collection("memos").add({
-        text: memoText,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        uid: currentUser.uid // ★追加：ユーザーIDを保存
-      }).then(() => {
-        console.log("メモを保存しました！");
-        memoInput.value = "";
-      }).catch((error) => {
-        console.error("保存に失敗しました: ", error);
-      });
-    }
+  if (editMode) {
+    // 更新
+    db.collection("memos").doc(editId).update({ text: memoText })
+    .then(() => {
+      console.log("更新しました");
+      editMode = false; editId = null;
+      saveButton.textContent = "保存";
+      memoInput.value = "";
+    });
+  } else {
+    // ★変更：新規保存時にuserIdを追加
+    db.collection("memos").add({
+      text: memoText,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      userId: currentUid // ユーザーIDを保存
+    }).then(() => {
+      console.log("保存しました");
+      memoInput.value = "";
+    });
   }
 });
 
-// メモリストのクリックイベント（削除と編集）
-memoList.addEventListener("click", (e) => {
-  const target = e.target;
-  const id = target.dataset.id;
-  
-  if (target.className === 'delete-button') {
-    if (confirm("本当にこのメモを削除しますか？")) {
-      db.collection("memos").doc(id).delete().then(() => {
-        console.log("メモを削除しました！");
-      }).catch((error) => {
-        console.error("削除に失敗しました: ", error);
+// ★変更：リストのクリックイベント
+memoList.addEventListener("click", (e) => { /* 変更なし */ });
+
+// ★変更：メモのリアルタイム表示関数
+function subscribeToMemos(uid) {
+  // 以前の購読があれば停止
+  if (unsubscribe) unsubscribe();
+
+  // ★自分のuserIdを持つメモだけをクエリ
+  unsubscribe = db.collection("memos")
+    .where("userId", "==", uid) // この行が重要！
+    .orderBy("createdAt", "desc")
+    .onSnapshot((querySnapshot) => {
+      memoList.innerHTML = "";
+      querySnapshot.forEach((doc) => {
+        // 表示処理は以前と同じ
+        const memo = doc.data();
+        const formattedDate = memo.createdAt ? new Date(memo.createdAt.seconds * 1000).toLocaleString('ja-JP') : '';
+        const memoItem = document.createElement("div");
+        memoItem.classList.add("memo-item");
+        memoItem.innerHTML = `
+          <div class="memo-content">
+            <p class="memo-text">${memo.text}</p>
+            <p class="memo-date">${formattedDate}</p>
+          </div>
+          <div class="memo-buttons">
+            <button class="edit-button" data-id="${doc.id}">編集</button>
+            <button class="delete-button" data-id="${doc.id}">削除</button>
+          </div>
+        `;
+        memoList.appendChild(memoItem);
       });
-    }
-  }
-
-  if (target.className === 'edit-button') {
-    const memoText = target.closest('.memo-item').querySelector('.memo-text').textContent;
-    memoInput.value = memoText;
-    
-    editMode = true;
-    editId = id;
-    saveButton.textContent = "更新";
-    
-    memoInput.focus();
-  }
-});
-
-// メモをリアルタイムで表示する機能
-function loadMemos() {
-  if (currentUser) {
-    db.collection("memos")
-      .where("uid", "==", currentUser.uid) // ★変更：ログインユーザーのメモのみ取得
-      .orderBy("createdAt", "desc")
-      .onSnapshot((querySnapshot) => {
-        memoList.innerHTML = "";
-        querySnapshot.forEach((doc) => {
-          const memo = doc.data();
-          const formattedDate = memo.createdAt ? new Date(memo.createdAt.seconds * 1000).toLocaleString('ja-JP') : '';
-
-          const memoItem = document.createElement("div");
-          memoItem.classList.add("memo-item");
-          memoItem.innerHTML = `
-            <div class="memo-content">
-              <p class="memo-text">${memo.text}</p>
-              <p class="memo-date">${formattedDate}</p>
-            </div>
-            <div class="memo-buttons">
-              <button class="edit-button" data-id="${doc.id}">編集</button>
-              <button class="delete-button" data-id="${doc.id}">削除</button>
-            </div>
-          `;
-          memoList.appendChild(memoItem);
-        });
-      });
-  }
+    });
 }
