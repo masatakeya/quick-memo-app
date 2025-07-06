@@ -10,18 +10,29 @@
     <div class="container">
         <h1>Quick Memo App</h1>
 
-        <div class="input-area">
-            <textarea id="memo-input" placeholder="ここにメモを入力..."></textarea>
-            <button id="save-button">保存</button>
+        <div id="auth-container">
+            <button id="login-button">Googleでログイン</button>
+            <div id="user-info" style="display: none;">
+                <p id="user-name"></p>
+                <button id="logout-button">ログアウト</button>
+            </div>
         </div>
 
-        <h2>保存したメモ</h2>
+        <div id="memo-container" style="display: none;">
+            <div class="input-area">
+                <textarea id="memo-input" placeholder="ここにメモを入力..."></textarea>
+                <button id="save-button">保存</button>
+            </div>
 
-        <div id="memo-list"></div>
+            <h2>保存したメモ</h2>
+
+            <div id="memo-list"></div>
+        </div>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
